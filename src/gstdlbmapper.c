@@ -1,19 +1,38 @@
-/**
- * Copyright (C) 2021, Dolby Laboratories
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
+/*
+* BSD 3-Clause License
+*
+* Copyright (c) 2018-2021, Dolby Laboratories
+* All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* * Redistributions of source code must retain the above copyright notice, this
+*   list of conditions and the following disclaimer.
+*
+* * Redistributions in binary form must reproduce the above copyright notice,
+*   this list of conditions and the following disclaimer in the documentation
+*   and/or other materials provided with the distribution.
+*
+* * Neither the name of the copyright holder nor the names of its
+*   contributors may be used to endorse or promote products derived from
+*   this software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
+void *lnk_symbol(void *lib, const char *name);
+void *lnk_open(const char *name);
+
 
 #include <gst/gst.h>
 #include <gst/video/video-format.h>
@@ -112,8 +131,6 @@ void slbc_callback(slbc_result_t *p420_ptr, void *mp) {
 			GstBuffer *rpu_buffer = gst_buffer_new_allocate(NULL, 32*32, NULL);
 			GST_BUFFER_PTS(rpu_buffer) = gstmapper->ui64_current_pts;
 	  		GST_BUFFER_DTS(rpu_buffer) = gstmapper->ui64_current_dts;
-			// GstMapInfo info_rpu = { 0 };
-			// gst_buffer_map(rpu_buffer, &info_rpu, GST_MAP_WRITE);
 			
 			GstMetaVisionRpu *meta = GST_META_VISION_RPU_ADD( rpu_buffer );
 			meta->data = g_malloc( p420_ptr->rpu_data_length-4 );
@@ -121,7 +138,6 @@ void slbc_callback(slbc_result_t *p420_ptr, void *mp) {
 			meta->size = p420_ptr->rpu_data_length-4;
 
 			gst_pad_push(gstmapper->rpupad, rpu_buffer);
-			// gst_buffer_unmap(rpu_buffer, &info_rpu);
 		}
 	}
 	GST_DEBUG_OBJECT(gstmapper, "output %1.5f", (float)GST_BUFFER_PTS( buffer_out ) / 1000000000.f);
@@ -262,7 +278,7 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 	}
 	
 	int32_t pts_vid = GST_BUFFER_PTS(p_buffer_vid);
-	int32_t pts_rpu = GST_BUFFER_PTS(p_buffer_rpu);
+	// int32_t pts_rpu = GST_BUFFER_PTS(p_buffer_rpu);
 
 	gstmapper->ui64_current_pts = GST_BUFFER_PTS(p_buffer_vid);
 	gstmapper->ui64_current_dts = GST_BUFFER_DTS(p_buffer_vid);
@@ -292,9 +308,12 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 	 		NULL
 		);
 
-		gboolean b = gst_pad_set_caps(gstmapper->srcpad, caps);
+		if (!gst_pad_set_caps(gstmapper->srcpad, caps)) {
+			GST_DEBUG_OBJECT(gstmapper, "Could not set src caps");
+		} else {
+			GST_DEBUG_OBJECT(gstmapper, "Set src caps");
+		}
 		gst_caps_unref(caps);
-		GST_DEBUG_OBJECT(gstmapper, "Set src caps");
 		
 		if (gstmapper->rpupad && gst_pad_is_linked(gstmapper->rpupad)) {
 			GstCaps *caps_rpu = gst_caps_new_simple(
@@ -384,13 +403,12 @@ static GstStateChangeReturn GST_DLB_MAPPER_change_state(GstElement *element, Gst
 }
 
 
-// dlbcomposer will not accept any input frames after this call until gst_dlbmapper_on_flush_stop got called
 static void gst_dlbmapper_on_flush_start(gstDlbMapper *mapper)
 {
 	g_mutex_lock(&mapper->mtx_flushing);
 	mapper->b_is_flushing = TRUE;
 
-	GST_DEBUG_OBJECT(mapper, "gstdlbcomposer: GST_EVENT_FLUSH_START");
+	GST_DEBUG_OBJECT(mapper, "GST_EVENT_FLUSH_START");
 
 	GST_COLLECT_PADS_STREAM_LOCK(mapper->collect);
 	gst_collect_pads_set_flushing(mapper->collect, TRUE);
@@ -480,7 +498,7 @@ GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* 
 		}
 		bRet = gst_collect_pads_event_default(pads, data, event, FALSE);
 		**/
-		bRet = gst_collect_pads_event_default( pads, data, event, TRUE );
+		gst_collect_pads_event_default( pads, data, event, TRUE );
 		if( g_strcmp0( pad_name, INPUT_VID ) == 0 )
 		{
 			gst_event_ref( event );
@@ -501,7 +519,7 @@ GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* 
 		break;
 	case GST_EVENT_FLUSH_START:
 		// let the collect pads handle it, but not send downstreams afterwards since we are going to do that
-		bRet = gst_collect_pads_event_default(pads, data, event, TRUE);
+		gst_collect_pads_event_default(pads, data, event, TRUE);
 		gst_event_ref(event);
 		if (g_strcmp0(pad_name, INPUT_VID) == 0)
 		{
@@ -512,7 +530,7 @@ GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* 
 		break;
 	case GST_EVENT_FLUSH_STOP:
 		// let the collect pads handle it, but not send downstreams afterwards since we are going to do that
-		bRet = gst_collect_pads_event_default(pads, data, event, TRUE);
+		gst_collect_pads_event_default(pads, data, event, TRUE);
 		gst_event_ref(event);
 		if (g_strcmp0(pad_name, INPUT_VID) == 0)
 		{

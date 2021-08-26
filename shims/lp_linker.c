@@ -1,22 +1,8 @@
-/**
- * Dolby Vision Mobile Media Live Processing
- * Copyright (C) 2020-2021, Dolby Laboratories
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * Lesser General Public License for more details.
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
- */
 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "linker.h"
 #include "lean_parser.h"
@@ -69,7 +55,7 @@ LEAN_PARSER_API bool lean_parser_last_error(lean_parser_t *p, const char **buffe
 	return symbols.last_error(p, buffer);
 }
 LEAN_PARSER_API void lean_parser_wait_for_rap(lean_parser_t *p, bool wait) {
-	return symbols.wait_for_rap(p, wait);
+	symbols.wait_for_rap(p, wait);
 }
 LEAN_PARSER_API lean_parser_return_t
 lean_parser_push_bytes(lean_parser_t *p, uint8_t *bytes, int32_t i_length, uint64_t pts, uint64_t dts,

@@ -38,7 +38,11 @@
 #include <stdbool.h>
 
 #ifdef SHARED_SLBCMMB_LIB
-	#define SLBC_API  __attribute__ ((visibility ("default")))
+	#ifndef _WIN32
+		#define SLBC_API  __attribute__ ((visibility ("default")))
+	#else
+		#define SLBC_API __declspec(dllexport)
+	#endif
 #else
 	#define SLBC_API
 #endif

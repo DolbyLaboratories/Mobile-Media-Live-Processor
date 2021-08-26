@@ -99,14 +99,14 @@
 /*! @brief Macro to handle DLL import/export */
 #ifdef LIBVES_MUX_EXPORTS
 /* export symbols */
-#ifdef WIN32
+#ifdef _WIN32
 #define DV_VES_MUX_API __declspec(dllexport)
 #else
 #define DV_VES_MUX_API __attribute__((visibility("default")))
 #endif
 #else
 /* import symbols */
-#ifdef WIN32
+#ifdef _WIN32
 #ifdef DV_VES_MUX_DLL
 #define DV_VES_MUX_API __declspec(dllimport)
 #else

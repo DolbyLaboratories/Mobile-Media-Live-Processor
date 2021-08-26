@@ -33,7 +33,11 @@
 
 
 #ifdef SHARED_LP_LIB
-	#define LEAN_PARSER_API __attribute__ ((visibility ("default")))
+	#ifndef _WIN32
+		#define LEAN_PARSER_API __attribute__ ((visibility ("default")))
+	#else
+		#define LEAN_PARSER_API __declspec(dllexport)
+	#endif
 #else
 	#define LEAN_PARSER_API
 #endif
