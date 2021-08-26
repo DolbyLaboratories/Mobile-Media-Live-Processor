@@ -145,31 +145,22 @@ static void gst_dlb_muxer_get_property( GObject* object, guint prop_id,
 }
 
 
-static gint gst_dlb_muxer_RBSPtoEBSP( guint8* ebsp_buf, guint8* rbsp, gint rbsp_size )
+static gint gst_dlb_muxer_RBSPtoEBSP( guint8 *ebsp_buf, guint8 *rbsp_buf, gint rbsp_length )
 {
-#define ZEROBYTES_SHORTSTARTCODE 2
-	gint j = 0;
+	gint j = 0, i;
 	gint zero_cnt = 0;
-	gint i;
-
-	for( i = 0; i < rbsp_size; i++ )
+	for( i = 0; i < rbsp_length; i++ )
 	{
-		if( ( zero_cnt == ZEROBYTES_SHORTSTARTCODE ) && !( rbsp[ i ] & 0xFC ) )
+		if( zero_cnt == 2 )
 		{
-			ebsp_buf[ j ] = 0x03;
-			j++;
-			zero_cnt = 0;
+			if( !( rbsp_buf[ i ] & 0xFC ) )
+			{
+				ebsp_buf[ j++ ] = 0x03;
+				zero_cnt = 0;
+			}
 		}
-		ebsp_buf[ j ] = rbsp[ i ];
-		if( rbsp[ i ] == 0x00 )
-		{
-			zero_cnt++;
-		}
-		else
-		{
-			zero_cnt = 0;
-		}
-		j++;
+		ebsp_buf[ j++ ] = rbsp_buf[ i ];
+		zero_cnt += rbsp_buf[ i ] == 0;
 	}
 
 	return j;
