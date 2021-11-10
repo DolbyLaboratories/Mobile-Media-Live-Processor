@@ -499,11 +499,11 @@ LEAN_PARSER_API bool lean_parser_last_error(lean_parser_t *p, const char **buffe
 LEAN_PARSER_API void lean_parser_wait_for_rap(lean_parser_t *p, bool wait); // default true
 
 LEAN_PARSER_API lean_parser_return_t
-lean_parser_push_bytes(lean_parser_t *p, uint8_t *bytes, int32_t i_length, uint64_t pts, uint64_t dts,
+lean_parser_push_bytes(lean_parser_t *p, uint8_t *bytes, int32_t i_length, int64_t pts, int64_t dts,
 	on_bump_t on_bump, on_access_unit_t on_access_unit, on_nal_unit_t on_nal_unit, void *user);
 
-#define lpUnknownPTS -1
-#define lpUnknownDTS -1
+#define lpUnknownPTS ((int64_t)-0x8000000000000000ll)
+#define lpUnknownDTS ((int64_t)-0x8000000000000000ll)
 
 #ifdef __cplusplus
 } // extern "C"

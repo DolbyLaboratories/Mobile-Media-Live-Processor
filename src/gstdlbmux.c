@@ -118,14 +118,19 @@ GST_DEBUG_CATEGORY_STATIC( dlbmuxer_debug );
 #define GST_CAT_DEFAULT dlbmuxer_debug
 
 
-enum { PROP_0, };
+enum { PROP_0, 
+	PROP_RPU_RBSP_TO_EBSP,
+};
 
 static void gst_dlb_muxer_set_property( GObject* object, guint prop_id,
 	const GValue* value, GParamSpec* pspec )
 {
-	// GstDlbMuxer *dlb_muxer = GST_dlb_muxer (object);
+	GstDlbMuxer *dlb_muxer = GST_dlb_muxer (object);
 	switch( prop_id )
 	{
+	case PROP_RPU_RBSP_TO_EBSP:
+		dlb_muxer->rbsp_to_ebsp = g_value_get_boolean(value);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID( object, prop_id, pspec );
 		break;
@@ -135,9 +140,12 @@ static void gst_dlb_muxer_set_property( GObject* object, guint prop_id,
 static void gst_dlb_muxer_get_property( GObject* object, guint prop_id,
 	GValue* value, GParamSpec* pspec )
 {
-	// GstDlbMuxer *dlb_muxer = GST_dlb_muxer (object);
+	GstDlbMuxer *dlb_muxer = GST_dlb_muxer (object);
 	switch( prop_id )
 	{
+	case PROP_RPU_RBSP_TO_EBSP:
+		g_value_set_boolean(value, dlb_muxer->rbsp_to_ebsp);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID( object, prop_id, pspec );
 		break;
@@ -271,9 +279,16 @@ static GstFlowReturn gst_dlb_muxer_aggregate( GstAggregator* aggregator, gboolea
 					ret = GST_FLOW_ERROR;
 					goto bail;
 				}
-				gint ebspSize = gst_dlb_muxer_RBSPtoEBSP( muxer->ebsp_buf + 4, meta->data, meta->size );
-				*( ( uint32_t* )muxer->ebsp_buf ) = 0x1000000;  // adding start code
-				ebspSize += 4;
+				gint ebspSize;
+				if (muxer->rbsp_to_ebsp) {
+					ebspSize = gst_dlb_muxer_RBSPtoEBSP( muxer->ebsp_buf + 4, meta->data, meta->size );
+					*( ( uint32_t* )muxer->ebsp_buf ) = 0x1000000;  // adding start code
+					ebspSize += 4;
+				} else {
+					ebspSize = meta->size + 4;
+					*( ( uint32_t* )muxer->ebsp_buf ) = 0x1000000;  // adding start code
+					memcpy(muxer->ebsp_buf + 4, meta->data, meta->size);
+				}
 				vesmux_result = dv_ves_mux_rpu_process( muxer->ves_muxer, muxer->ebsp_buf, ebspSize );
 				if( DV_VES_MUX_OK == vesmux_result )
 				{
@@ -435,7 +450,7 @@ static void gst_dlb_muxer_finalize( GObject* object )
 	gst_queue_array_free( muxer->clock_times );
 }
 
-
+#if GST_PLUGINS_BASE_VERSION_MINOR > 10
 GstFlowReturn gst_dlb_muxer_update_src_caps( GstAggregator* self, GstCaps* caps, GstCaps** ret )
 {
 	// GstDlbMuxer *muxer = GST_dlb_muxer(self);
@@ -448,7 +463,7 @@ GstCaps* gst_dlb_muxer_fixate_src_caps( GstAggregator* self, GstCaps* caps )
 	// GstDlbMuxer *muxer = GST_dlb_muxer(self);
 	return GST_AGGREGATOR_CLASS( gst_dlb_muxer_parent_class )->fixate_src_caps( self, caps );
 }
-
+#endif
 
 static void gst_dlb_muxer_class_init( GstDlbMuxerClass* klass )
 {
@@ -466,8 +481,10 @@ static void gst_dlb_muxer_class_init( GstDlbMuxerClass* klass )
 
 	gstaggregator_class->aggregate = gst_dlb_muxer_aggregate;
 	gstaggregator_class->sink_event = gst_dlb_muxer_sink_event;
+	#if GST_PLUGINS_BASE_VERSION_MINOR > 10
 	gstaggregator_class->update_src_caps = gst_dlb_muxer_update_src_caps;
 	gstaggregator_class->fixate_src_caps = gst_dlb_muxer_fixate_src_caps;
+	#endif
 	gstelement_class->request_new_pad = gst_dlb_muxer_request_new_pad;
 	gstelement_class->release_pad = gst_dlb_muxer_release_pad;
 
@@ -480,6 +497,10 @@ static void gst_dlb_muxer_class_init( GstDlbMuxerClass* klass )
 	gst_element_class_add_static_pad_template_with_gtype( gstelement_class, &rpu_pad, GST_TYPE_dlb_muxer_PAD );
 	gst_element_class_add_static_pad_template_with_gtype( gstelement_class, &sink_pad, GST_TYPE_dlb_muxer_PAD );
 	gst_element_class_add_static_pad_template_with_gtype( gstelement_class, &src_pad, GST_TYPE_AGGREGATOR_PAD );
+
+	g_object_class_install_property(
+		gobject_class, PROP_RPU_RBSP_TO_EBSP,
+		g_param_spec_boolean("rbsp-to-ebsp", "Perform RBSP to EBSP conversion on RPU", "true or false", true, G_PARAM_READWRITE));
 
 	GST_DEBUG_CATEGORY_INIT( dlbmuxer_debug, "dlbmuxer", 0, "Dolby Vision Muxer" );
 }
@@ -510,6 +531,7 @@ static void gst_dlb_muxer_init( GstDlbMuxer* muxer )
 	muxer->cnt_eos = 0;
 	muxer->ebsp_buf_length = 10000000;
 	muxer->ebsp_buf = g_malloc( muxer->ebsp_buf_length );
+	muxer->rbsp_to_ebsp = true;
 
 	muxer->clock_times = gst_queue_array_new_for_struct( sizeof( TimeStamp ), 64 );
 }

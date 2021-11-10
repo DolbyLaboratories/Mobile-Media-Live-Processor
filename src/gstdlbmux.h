@@ -86,6 +86,7 @@ struct _GstDlbMuxer
 	guint32 cnt_eos;
 	gint ebsp_buf_length;
 	guint8* ebsp_buf;
+	gboolean rbsp_to_ebsp;
 
 	GstQueueArray* clock_times;
 };

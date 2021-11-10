@@ -44,7 +44,16 @@
 		#define SLBC_API __declspec(dllexport)
 	#endif
 #else
-	#define SLBC_API
+	#ifdef _WIN32
+		#define SLBC_API __declspec(dllimport)
+	#else
+		#define SLBC_API
+	#endif
+#endif
+
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 typedef struct {
@@ -53,7 +62,7 @@ typedef struct {
 	uint8_t *rpu_data;
 } slbc_result_t;
 
-typedef void (*slbc_cb_func_t)(slbc_result_t *p420_ptr, void *p_data_callback_handle);
+typedef void (*slbc_cb_func_t)(slbc_result_t *p_output, void *p_data_callback_handle);
 typedef enum { SlbcMmbOp_OutputSDR, SlbcMmbOp_Output81 } slbc_mmb_operation_t;
 
 /*! @brief this structure is passed to initialization function as SLBC library configuration parameters */
@@ -62,10 +71,11 @@ typedef struct
 	void *p_data_callback_handle;     /**< @brief the handle which is to be passed to the callback function as the first argument */
 	slbc_cb_func_t pf_data_callback;  /**< @brief pointer to the callback function, must not be NULL */
 
-	uint32_t width;
-	uint32_t height;
+	uint32_t width;                   /**< @brief width in pixels of the input signal */
+	uint32_t height;                  /**< @brief height in pixels of the input signal */
+	float fps;                        /**< @brief frame rate of the input signal */
 	
-	slbc_mmb_operation_t operation;
+	slbc_mmb_operation_t operation;   /**< @brief specify whether to convert to SDR, to 8.4 (passthru w/ optional metadata creation) or to 8.1 */
 	
 } slbc_config_t;
 
@@ -82,7 +92,6 @@ SLBC_API const char *slbc_get_api_ver(void);
 SLBC_API const char *slbc_get_build_info(void);
 
 /*! @brief Create a SLBC context
- *  @param slbc_ptr Handle to context pointer to initialize
  *  @param ps_slbc_config Pointer to configuration structure
  *  @return NULL in case of error \sa slbc_last_error
 */
@@ -114,4 +123,8 @@ SLBC_API bool slbc_flush(slbc_t *slbc_ptr);
 */
 SLBC_API const char *slbc_last_error(slbc_t *slbc_ptr);
 
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 #endif

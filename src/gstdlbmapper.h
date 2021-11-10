@@ -78,7 +78,7 @@ struct _gstDlbMapper
 	uint64_t ui64_current_pts;
 	uint64_t ui64_current_dts;
 	uint32_t eos_cnt;
-	bool output81;
+	slbc_mmb_operation_t slbc_operation;
 };
 
 struct _gstDlbMapperClass

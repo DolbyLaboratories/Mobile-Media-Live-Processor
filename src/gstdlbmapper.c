@@ -92,7 +92,7 @@ void slbc_callback(slbc_result_t *p420_ptr, void *mp) {
 	gstDlbMapper *gstmapper = (gstDlbMapper *)mp;
 	
 	GstMapInfo info_out = { 0 };
-	int32_t bytes = gstmapper->output81 ? sizeof(uint16_t) : sizeof(uint8_t);
+	int32_t bytes = gstmapper->slbc_operation == SlbcMmbOp_OutputSDR ? sizeof(uint8_t) : sizeof(uint16_t);
 	GstBuffer *buffer_out = gst_buffer_new_allocate(NULL, bytes * gstmapper->width*gstmapper->height*3/2, NULL);
 	gst_buffer_map(buffer_out, &info_out, GST_MAP_WRITE);
 	int32_t chroma_stride = bytes * gstmapper->width/2;
@@ -116,13 +116,6 @@ void slbc_callback(slbc_result_t *p420_ptr, void *mp) {
 		ptr += chroma_stride;
 	}
 	
-	if (p420_ptr->rpu_data && p420_ptr->rpu_data_length) {
-		GstMetaVisionRpu *meta = GST_META_VISION_RPU_ADD( buffer_out );
-		meta->data = g_malloc( p420_ptr->rpu_data_length );
-		memcpy( meta->data, p420_ptr->rpu_data, p420_ptr->rpu_data_length );
-		meta->size = p420_ptr->rpu_data_length;
-	}
-	
 	gst_buffer_unmap(buffer_out, &info_out);
 	gst_pad_push(gstmapper->srcpad, buffer_out);
 	
@@ -133,8 +126,7 @@ void slbc_callback(slbc_result_t *p420_ptr, void *mp) {
 	  		GST_BUFFER_DTS(rpu_buffer) = gstmapper->ui64_current_dts;
 			
 			GstMetaVisionRpu *meta = GST_META_VISION_RPU_ADD( rpu_buffer );
-			meta->data = g_malloc( p420_ptr->rpu_data_length-4 );
-			memcpy( meta->data, p420_ptr->rpu_data+4, p420_ptr->rpu_data_length-4 );
+			meta->data = g_memdup( p420_ptr->rpu_data+4, p420_ptr->rpu_data_length-4 );
 			meta->size = p420_ptr->rpu_data_length-4;
 
 			gst_pad_push(gstmapper->rpupad, rpu_buffer);
@@ -150,16 +142,15 @@ void GST_DLB_MAPPER_set_property(GObject* object, guint prop_id, const GValue* v
 	switch (prop_id) {
 	case PROP_OPERATION:
 		if (!strcmp("8.1", g_value_get_string(value))) {
-			gstmapper->output81 = true;
-			
-			if (gstmapper->output81) {
-				if (!gstmapper->rpupad) {
-					GstPadTemplate *p_template = gst_element_class_get_pad_template(___mapper_element_class__, "output_rpu_pad_template");
-					gstmapper->rpupad = gst_pad_new_from_template(p_template, OUTPUT_RPU);
-					gst_pad_set_active(gstmapper->rpupad, TRUE);
-					gst_element_add_pad(GST_ELEMENT(object), gstmapper->rpupad);
-				}
-			} else if (gstmapper->rpupad) {
+			gstmapper->slbc_operation = SlbcMmbOp_Output81;
+			if (!gstmapper->rpupad) {
+				GstPadTemplate *p_template = gst_element_class_get_pad_template(___mapper_element_class__, "output_rpu_pad_template");
+				gstmapper->rpupad = gst_pad_new_from_template(p_template, OUTPUT_RPU);
+				gst_pad_set_active(gstmapper->rpupad, TRUE);
+				gst_element_add_pad(GST_ELEMENT(object), gstmapper->rpupad);
+			}
+		} else {
+			if (gstmapper->rpupad) {
 				gst_pad_set_active(gstmapper->rpupad, FALSE);
 				gst_element_remove_pad(GST_ELEMENT(object), gstmapper->rpupad);
 			}
@@ -178,7 +169,14 @@ static void GST_DLB_MAPPER_get_property(GObject *object, guint prop_id, GValue *
 
 	switch (prop_id) {
 	case PROP_OPERATION:
-		g_value_set_string(value, gstmapper->output81 ? "8.1":"sdr");
+		switch(gstmapper->slbc_operation) {
+			case SlbcMmbOp_Output81:
+				g_value_set_string(value, "8.1");
+				break;
+			case SlbcMmbOp_OutputSDR:
+				g_value_set_string(value, "sdr");
+				break;
+		}
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -241,19 +239,19 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 	if( ( GST_BUFFER_PTS( p_buffer_vid ) == GST_CLOCK_TIME_NONE ) || ( GST_BUFFER_PTS( p_buffer_rpu ) == GST_CLOCK_TIME_NONE ) ||
 		( GST_BUFFER_PTS( p_buffer_vid ) == GST_BUFFER_PTS( p_buffer_rpu ) ) )
 	{
-		gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 0 ] );
-		gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 1 ] );
+		gst_buffer_unref(gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 0 ] ));
+		gst_buffer_unref(gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 1 ] ));
 	}
 	else if( GST_BUFFER_PTS( p_buffer_vid ) > GST_BUFFER_PTS( p_buffer_rpu ) )
 	{
-		gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 1 ] );
+		gst_buffer_unref(gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 1 ] ));
 		GST_DEBUG_OBJECT(gstmapper, "drop RPU b%1.5f vs r%1.5f", (float)GST_BUFFER_PTS( p_buffer_vid )/1000000000.f, (float)GST_BUFFER_PTS( p_buffer_rpu )/1000000000.f);
 		return GST_FLOW_OK;
 	}
 	else
 	{
 		g_assert( GST_BUFFER_PTS( p_buffer_vid ) < GST_BUFFER_PTS( p_buffer_rpu ) );
-		gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 0 ] );
+		gst_buffer_unref(gst_collect_pads_pop( gstmapper->collect, gstmapper->collect_data[ 0 ] ));
 		GST_DEBUG_OBJECT(gstmapper, "drop VID b%1.5f vs r%1.5f", (float)GST_BUFFER_PTS( p_buffer_vid )/1000000000.f, (float)GST_BUFFER_PTS( p_buffer_rpu )/1000000000.f);
 		return GST_FLOW_OK;
 	}
@@ -276,57 +274,10 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 	if (p_buffer_rpu != NULL) {
 		gst_buffer_map(p_buffer_rpu, &info_rpu, GST_MAP_READ);
 	}
-	
-	int32_t pts_vid = GST_BUFFER_PTS(p_buffer_vid);
-	// int32_t pts_rpu = GST_BUFFER_PTS(p_buffer_rpu);
 
 	gstmapper->ui64_current_pts = GST_BUFFER_PTS(p_buffer_vid);
 	gstmapper->ui64_current_dts = GST_BUFFER_DTS(p_buffer_vid);
 
-	if (!gstmapper->slbc_ptr) {
-		slbc_config_t config = {
-			.pf_data_callback = slbc_callback,
-			.p_data_callback_handle = (void *)gstmapper,
-			.width = gstmapper->width,
-			.height = gstmapper->height,
-			.operation = gstmapper->output81 ? SlbcMmbOp_Output81 : SlbcMmbOp_OutputSDR
-		};
-		gstmapper->slbc_ptr = slbc_create(&config);
-		if (!gstmapper->slbc_ptr) {
-			GST_DEBUG_OBJECT(gstmapper, "SLBC init failed: %s", slbc_last_error(NULL));
-			return GST_FLOW_ERROR;
-		}
-		
-		GstCaps *caps = gst_caps_new_simple(
-			"video/x-raw",
-			"format", G_TYPE_STRING, gstmapper->output81 ? "I420_10LE" : "I420",
-			"width", G_TYPE_INT, gstmapper->width,
-			"height", G_TYPE_INT, gstmapper->height,
-			"interlace-mode", G_TYPE_STRING, "progressive",
-			"colorimetry", G_TYPE_STRING, gstmapper->output81 ? "bt2020" /* smpte240m? */: "bt709",
-			"framerate", GST_TYPE_FRACTION, gstmapper->fps_num, gstmapper->fps_denom,
-	 		NULL
-		);
-
-		if (!gst_pad_set_caps(gstmapper->srcpad, caps)) {
-			GST_DEBUG_OBJECT(gstmapper, "Could not set src caps");
-		} else {
-			GST_DEBUG_OBJECT(gstmapper, "Set src caps");
-		}
-		gst_caps_unref(caps);
-		
-		if (gstmapper->rpupad && gst_pad_is_linked(gstmapper->rpupad)) {
-			GstCaps *caps_rpu = gst_caps_new_simple(
-				"video/x-raw",
-				"format", G_TYPE_STRING, "Gray8",
-				"width", G_TYPE_INT, 32,
-				"height", G_TYPE_INT, 32,
-				NULL
-			);
-			gst_pad_set_caps(gstmapper->rpupad, caps_rpu);
-			GST_DEBUG_OBJECT(gstmapper, "Set RPU caps");
-		}
-	}
 	
 	#if 0
 	FILE *f = fopen("/Users/anedd/vid/trash/damn.yuv", "wb");
@@ -334,6 +285,10 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 	fclose(f);
 	#endif
 	
+	if (!gstmapper->slbc_ptr) {
+		GST_DEBUG_OBJECT(gstmapper, "SLBC init failed: %s", slbc_last_error(NULL));
+		return GST_FLOW_ERROR;
+	}
 
 	//double tic = tictoc();
 	if (!slbc_process(gstmapper->slbc_ptr, (uint16_t *)info_vid.data, gst_rpu_meta_data->data, gst_rpu_meta_data->size)) {
@@ -349,7 +304,7 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 		gst_buffer_unref(p_buffer_rpu);
 	}
 	
-	GST_DEBUG_OBJECT(gstmapper, "did frame pts=%i", pts_vid);
+	GST_DEBUG_OBJECT(gstmapper, "did frame pts=%i", gstmapper->ui64_current_pts);
 	return GST_FLOW_OK;
 }
 
@@ -435,6 +390,54 @@ static void gst_dlbmapper_on_flush_stop(gstDlbMapper* mapper)
 }
 
 
+
+void create_slbc_mmb_and_set_downstream(gstDlbMapper *gstmapper) {
+
+	if (gstmapper->slbc_ptr) {
+		slbc_destroy(gstmapper->slbc_ptr);
+	}
+
+	slbc_config_t config = {
+		.pf_data_callback = slbc_callback,
+		.p_data_callback_handle = (void *)gstmapper,
+		.width = gstmapper->width,
+		.height = gstmapper->height,
+		.fps = (float)gstmapper->fps_num / gstmapper->fps_denom,
+		.operation = gstmapper->slbc_operation,
+	};
+	gstmapper->slbc_ptr = slbc_create(&config);
+	
+	GstCaps *caps = gst_caps_new_simple(
+		"video/x-raw",
+		"format", G_TYPE_STRING, gstmapper->slbc_operation == SlbcMmbOp_OutputSDR ? "I420" : "I420_10LE",
+		"width", G_TYPE_INT, gstmapper->width,
+		"height", G_TYPE_INT, gstmapper->height,
+		"interlace-mode", G_TYPE_STRING, "progressive",
+		"colorimetry", G_TYPE_STRING, gstmapper->slbc_operation == SlbcMmbOp_OutputSDR ? "bt709" : "bt2020" /* smpte240m? */,
+		"framerate", GST_TYPE_FRACTION, gstmapper->fps_num, gstmapper->fps_denom,
+		NULL
+	);
+
+	if (!gst_pad_set_caps(gstmapper->srcpad, caps)) {
+		GST_DEBUG_OBJECT(gstmapper, "Could not set src caps");
+	} else {
+		GST_DEBUG_OBJECT(gstmapper, "Set src caps");
+	}
+	gst_caps_unref(caps);
+
+	if (gstmapper->rpupad && gst_pad_is_linked(gstmapper->rpupad)) {
+		GstCaps *caps_rpu = gst_caps_new_simple(
+			"video/x-raw",
+			"format", G_TYPE_STRING, "Gray8",
+			"width", G_TYPE_INT, 32,
+			"height", G_TYPE_INT, 32,
+			NULL
+		);
+		gst_pad_set_caps(gstmapper->rpupad, caps_rpu);
+		GST_DEBUG_OBJECT(gstmapper, "Set RPU caps");
+	}
+}
+
 static gboolean
 GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* event, gpointer user_data)
 {
@@ -455,7 +458,6 @@ GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* 
 
 		if (g_strcmp0(pad_name, INPUT_VID) == 0)
 		{
-			gchar *buffer;
 			gst_structure_get_int(structure, "width", &gstmapper->width);
 			gst_structure_get_int(structure, "height", &gstmapper->height);
 			gst_structure_get_fraction( structure, "framerate", &gstmapper->fps_num, &gstmapper->fps_denom );
@@ -466,12 +468,15 @@ GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* 
 			}
 			GstCaps *outcaps = gst_caps_copy(caps);
 			gst_caps_set_simple( outcaps,
-				"format", G_TYPE_STRING, gstmapper->output81 ? "I420_10LE" : "I420",
+				"format", G_TYPE_STRING, gstmapper->slbc_operation == SlbcMmbOp_OutputSDR ? "I420" : "I420_10LE",
 				"framerate", GST_TYPE_FRACTION, gstmapper->fps_num, gstmapper->fps_denom, // FIXME: must be set/kept upstream
 				"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,NULL);
 
 			gst_pad_set_caps(gstmapper->srcpad, outcaps);
 			gst_caps_unref(outcaps);
+
+			create_slbc_mmb_and_set_downstream(gstmapper);
+
 		} else if (!g_strcmp0(pad_name, INPUT_RPU)) {
 			int z=0;
 		}
@@ -604,7 +609,7 @@ static void GST_DLB_MAPPER_class_init(gstDlbMapperClass* klass)
 	
 	g_object_class_install_property(
 		gobject_class, PROP_OPERATION,
-		g_param_spec_string("operation", "Operation Mode", "Specify \"sdr\" or \"8.1\" ", "sdr", G_PARAM_READWRITE));
+		g_param_spec_string("operation", "Operation Mode", "Specify \"sdr\", \"8.1\" or \"8.4\" ", "sdr", G_PARAM_READWRITE));
 }
 
 static void GST_DLB_MAPPER_init(gstDlbMapper *gstmapper)
@@ -633,7 +638,7 @@ static void GST_DLB_MAPPER_init(gstDlbMapper *gstmapper)
 	gstmapper->ui64_current_pts = -1;
 	gstmapper->ui64_current_dts = -1;
 	gstmapper->eos_cnt = 0;
-	gstmapper->output81 = false;
+	gstmapper->slbc_operation = SlbcMmbOp_OutputSDR;
 	gstmapper->rpupad = NULL;
 }
 

@@ -208,8 +208,7 @@ void on_bump( lp_access_unit_t* p_au, enum_au_seis_t fun, void* rx_ )
 	if( p_au->rpu && p_au->rpu_blob_len )
 	{
 		GstMetaVisionRpu* meta = GST_META_VISION_RPU_ADD( frame->output_buffer );
-		meta->data = g_malloc( p_au->rpu_blob_len );
-		memcpy( meta->data, p_au->rpu, p_au->rpu_blob_len );
+		meta->data = g_memdup( p_au->rpu, p_au->rpu_blob_len );
 		meta->size = p_au->rpu_blob_len;
 	}
 	gst_video_decoder_finish_frame( GST_VIDEO_DECODER( rx ), frame );
