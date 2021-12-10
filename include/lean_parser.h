@@ -31,6 +31,8 @@
 */
 
 
+#ifndef __LEAN_PARSER__
+#define __LEAN_PARSER__
 
 #ifdef SHARED_LP_LIB
 	#ifndef _WIN32
@@ -46,7 +48,7 @@
 extern "C" {
 #endif
 
-
+#include <stdint.h>
 
 typedef struct
 {
@@ -451,18 +453,19 @@ typedef struct {
 	bool concatenationFlag;
 	uint64_t ui64_dpb_output_time; ///< DPB output time in units of vui_time_scale as derived from picture timing SEI message.
 	                               ///< If no picture timing SEI is available for this picture, the value is ~0u.
+
 	union {
 		struct {
-			h265_sps_t *sps_hevc;
-			h265_pps_t *pps_hevc;
-			h265_vps_t *vps_hevc;
-			h265_picture_type_t pictureType_hevc;
-		};
+			h265_sps_t *sps;
+			h265_pps_t *pps;
+			h265_vps_t *vps;
+			h265_picture_type_t pictureType;
+		} hevc;
 		struct {
-			h264_sps_t *sps_avc;
-			h264_pps_t *pps_avc;
-			h264_picture_type_t pictureType_avc;
-		};
+			h264_sps_t *sps;
+			h264_pps_t *pps;
+			h264_picture_type_t pictureType;
+		} avc;
 	};
 
 	uint8_t *sei;   ///< Pointer to sei. use callback to go to next sei data \sa enum_au_seis_t
@@ -497,6 +500,7 @@ LEAN_PARSER_API const char *lean_parser_version_str();
 
 LEAN_PARSER_API bool lean_parser_last_error(lean_parser_t *p, const char **buffer);
 LEAN_PARSER_API void lean_parser_wait_for_rap(lean_parser_t *p, bool wait); // default true
+LEAN_PARSER_API void lean_parser_input_is_au( lean_parser_t* p, bool au_mode ); // default false
 
 LEAN_PARSER_API lean_parser_return_t
 lean_parser_push_bytes(lean_parser_t *p, uint8_t *bytes, int32_t i_length, int64_t pts, int64_t dts,
@@ -508,3 +512,5 @@ lean_parser_push_bytes(lean_parser_t *p, uint8_t *bytes, int32_t i_length, int64
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+#endif /* __LEAN_PARSER__ */

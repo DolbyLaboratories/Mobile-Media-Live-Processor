@@ -149,11 +149,15 @@ void GST_DLB_MAPPER_set_property(GObject* object, guint prop_id, const GValue* v
 				gst_pad_set_active(gstmapper->rpupad, TRUE);
 				gst_element_add_pad(GST_ELEMENT(object), gstmapper->rpupad);
 			}
+		} else if (!strcmp("8.4", g_value_get_string(value))) {
+			// note for profile 8.4, simply pass original rpu data to the muxing element
+			gstmapper->slbc_operation = SlbcMmbOp_Output84;
 		} else {
 			if (gstmapper->rpupad) {
 				gst_pad_set_active(gstmapper->rpupad, FALSE);
 				gst_element_remove_pad(GST_ELEMENT(object), gstmapper->rpupad);
 			}
+			gstmapper->slbc_operation = SlbcMmbOp_OutputSDR;
 		}
 		break;
 	default:
@@ -172,6 +176,9 @@ static void GST_DLB_MAPPER_get_property(GObject *object, guint prop_id, GValue *
 		switch(gstmapper->slbc_operation) {
 			case SlbcMmbOp_Output81:
 				g_value_set_string(value, "8.1");
+				break;
+			case SlbcMmbOp_Output84:
+				g_value_set_string(value, "8.4");
 				break;
 			case SlbcMmbOp_OutputSDR:
 				g_value_set_string(value, "sdr");
@@ -278,7 +285,6 @@ static GstFlowReturn on_collect_data_available(GstCollectPads *pads, gpointer us
 	gstmapper->ui64_current_pts = GST_BUFFER_PTS(p_buffer_vid);
 	gstmapper->ui64_current_dts = GST_BUFFER_DTS(p_buffer_vid);
 
-	
 	#if 0
 	FILE *f = fopen("/Users/anedd/vid/trash/damn.yuv", "wb");
 	fwrite((uint16_t *)info_vid.data, 2, gstmapper->width*gstmapper->height*3/2, f);
@@ -463,7 +469,7 @@ GST_DLB_MAPPER_sink_event(GstCollectPads* pads, GstCollectData* data, GstEvent* 
 			gst_structure_get_fraction( structure, "framerate", &gstmapper->fps_num, &gstmapper->fps_denom );
 			if( gstmapper->fps_num == 0) 
 			{
-				gstmapper->fps_num = 60000; // make x265enc link
+				gstmapper->fps_num = 30000; // make x265enc link
 				gstmapper->fps_denom = 1001;
 			}
 			GstCaps *outcaps = gst_caps_copy(caps);

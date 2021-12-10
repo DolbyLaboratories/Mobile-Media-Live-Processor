@@ -63,7 +63,7 @@ typedef struct {
 } slbc_result_t;
 
 typedef void (*slbc_cb_func_t)(slbc_result_t *p_output, void *p_data_callback_handle);
-typedef enum { SlbcMmbOp_OutputSDR, SlbcMmbOp_Output81 } slbc_mmb_operation_t;
+typedef enum { SlbcMmbOp_OutputSDR, SlbcMmbOp_Output81, SlbcMmbOp_Output84 } slbc_mmb_operation_t;
 
 /*! @brief this structure is passed to initialization function as SLBC library configuration parameters */
 typedef struct
@@ -103,6 +103,7 @@ SLBC_API slbc_t *slbc_create(slbc_config_t *ps_slbc_config);
 SLBC_API void slbc_destroy(slbc_t *slbc_ptr);
 
 /*! @brief Process one  frame
+ *  The RPU data is only needed for profile 8.1 conversion; it must be in RBSP and without start code, i.e. beginning with 0x19
  *  @param slbc_ptr Handle to context
  *  @param p_img Planar 4:2:0 image data (Dolby Vision Profile 8.4, YCbCr 10bit, length shall be sizeof(uint16_t)*width*height*3/2)
  *  @param rpu_ptr RPU blob (Dolby Vision Metadata)

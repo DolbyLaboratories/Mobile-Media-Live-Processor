@@ -53,6 +53,8 @@ G_BEGIN_DECLS
 typedef struct _gstDlbMapper gstDlbMapper;
 typedef struct _gstDlbMapperClass gstDlbMapperClass;
 
+
+
 struct _gstDlbMapper
 {
 	GstElement base_dlbcomposer;

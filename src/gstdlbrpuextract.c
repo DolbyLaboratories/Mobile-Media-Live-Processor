@@ -116,7 +116,7 @@ static gint find_frame( gconstpointer a, gconstpointer b )
 {
 	GstVideoCodecFrame* frame = ( GstVideoCodecFrame* )a;
 	lp_access_unit_t* decoded_frame = ( lp_access_unit_t* )b;
-	return ( int64_t )decoded_frame->pts - frame->pts;
+	return (gint)(( guint64 )decoded_frame->pts - frame->pts);
 }
 
 static void unref_frame( gpointer frame )
@@ -145,7 +145,7 @@ gint compare_decoding_order_cnt( gconstpointer a, gconstpointer b )
 void on_bump( lp_access_unit_t* p_au, enum_au_seis_t fun, void* rx_ )
 {
 	GstBerRX *rx = GST_RX( rx_ );
-	if (p_au->sps_hevc->vui_parameters_present_flag) {
+	if (p_au->hevc.sps->vui_parameters_present_flag) {
 		static bool done = false;
 		if (!done++) {
 			bool override_frame_rate = true;
@@ -162,7 +162,7 @@ void on_bump( lp_access_unit_t* p_au, enum_au_seis_t fun, void* rx_ )
 			if (override_frame_rate) {
 				rx->codec_state->caps = gst_caps_make_writable (rx->codec_state->caps);
 				gst_caps_set_simple(rx->codec_state->caps, "framerate", GST_TYPE_FRACTION,
-									p_au->sps_hevc->vui.vui_time_scale, p_au->sps_hevc->vui.vui_num_units_in_tick, NULL);
+									p_au->hevc.sps->vui.vui_time_scale, p_au->hevc.sps->vui.vui_num_units_in_tick, NULL);
 				if (!gst_pad_set_caps(GST_VIDEO_DECODER( rx )->srcpad, rx->codec_state->caps)) {
 					GST_DEBUG_OBJECT(rx, "gst_pad_set_caps override failed");
 				}
@@ -287,8 +287,6 @@ static GstFlowReturn gst_decoder_finish( GstVideoDecoder* decoder )
 static GstFlowReturn gst_decoder_handle_frame( GstVideoDecoder* decoder, GstVideoCodecFrame* frame )
 {
 	GstMapInfo info;
-	int32_t err;
-
 	GstBerRX* rx = GST_RX( decoder );
 
 	gst_video_codec_frame_ref( frame );
@@ -313,7 +311,6 @@ static GstFlowReturn gst_decoder_handle_frame( GstVideoDecoder* decoder, GstVide
 
 	if( gst_pad_is_linked( rx->passthru ) )
 	{
-		GstMapInfo info_out;
 		GstBuffer* buffer_out = gst_buffer_copy( frame->input_buffer );
 		gst_pad_push( rx->passthru, buffer_out );
 	}
